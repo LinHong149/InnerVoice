@@ -9,7 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "14.0.3",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "fs": "^0.0.1-security",
+    "langchain": "^0.0.192",
+    "next": "^14.0.3",
     "react": "^18",
     "react-dom": "^18"
   },

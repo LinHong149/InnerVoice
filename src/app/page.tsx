@@ -1,116 +1,327 @@
 'use client';
 import Image from 'next/image'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { OpenAI as LangChainOpenAI } from "langchain/llms/openai";
 import { PERSONALITIES } from './constant'; // Make sure the file name is correct
+import axios from 'axios';
+// import fs from 'fs';
+// import path from 'path';
+// import OpenAI from 'openai';
 
-const ChatMessage = ({ name, message }) => {
-  return (
-    <div className={`flex w-full h-fit px-4 py-4 rounded-xl border-2 flex-col justify-between items-start gap-1`}>
-      <div className="text-xs">{PERSONALITIES[name]?.title}</div>
-      <div className="text-md">{message}</div>
-    </div>
-  )
-}
-
-// const Avatar = ({ name }) => {
-//   const animal = PERSONALITIES[name];
-
-//   return (
-//     <button style={{ borderColor: animal ? animal.color : 'defaultColor' }} className="btn btn-outline overflow-hidden h-[20vh] grow">
-//       <Image src={animal?.image || 'defaultImage.jpg'} width={200} height={200} alt={animal?.title || 'Default Title'} />
-//     </button>
-//   );
-// };
+import * as dotenv from "dotenv";
+dotenv.config();
 
 
-// Helper function to convert hex to rgba
-const hexToRGBA = (hex, opacity) => {
-  let r = parseInt(hex.slice(1, 3), 16),
-      g = parseInt(hex.slice(3, 5), 16),
-      b = parseInt(hex.slice(5, 7), 16);
-
-  return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-};
-
-const Select = ({ name }) => {
-  const [isActive, setIsActive] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
-  const animal = PERSONALITIES[name];
-  const animalColor = animal ? animal.color : '#ffffff'; // default color as white
-
-  const boxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}`;
-  const hoverBoxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}, 0 0 30px 0 ${hexToRGBA(animalColor, 0.4)}`;
-
-  const activeStyles = isActive || isHovered
-    ? { borderColor: animalColor, backgroundColor: animalColor, boxShadow: hoverBoxShadow } 
-    : { borderColor: animalColor, boxShadow };
+// const openai = new OpenAI(
+//   process.env.OPENAI_API_KEY
+// );
+// const speechFile = path.resolve("./speech.mp3")
 
 
-  return (
-    <button 
-      style={activeStyles} 
-      className="btn btn-outline min-h-[22vh] min-w-[20%] flex flex-grow border-2 flex-col flex-nowrap pt-6 aspect-square"
-      onClick={() => setIsActive(!isActive)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <p className={`${isActive? 'text-[#282A35]': ""}`}>{PERSONALITIES[name]?.title}</p>
-      <Image src={animal?.image || 'defaultImage.jpg'} width={200} height={200} alt={animal?.title || 'Default Title'} />
-    </button>
-  );
-};
 
-const Avatar = ({ name }) => {
-  const [isHovered, setIsHovered] = useState(false);
-  const animal = PERSONALITIES[name];
-  const animalColor = animal ? animal.color : '#ffffff'; // default color as white
-
-  const boxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}`;
-  const hoverBoxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}, 0 0 30px 0 ${hexToRGBA(animalColor, 0.4)}`;
-
-  const hoverStyles = isHovered 
-    ? { borderColor: animalColor, backgroundColor: animalColor, boxShadow: hoverBoxShadow } 
-    : { borderColor: animalColor, boxShadow };
-
-  return (
-    <button 
-      style={hoverStyles} 
-      className="btn btn-outline min-h-[22vh] min-w-[30%] flex flex-grow border-2 flex-col flex-nowrap pt-6"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      <p>{PERSONALITIES[name]?.title}</p>
-      <Image src={animal?.image || 'defaultImage.jpg'} width={200} height={200} alt={animal?.title || 'Default Title'} />
-    </button>
-  );
-};
 
 export default function Home() {
+  
   const [drawerOpen, setDrawerOpen] = useState(true)
-  const [koala, setKoala] = useState(false);
-  const [bee, setBee] = useState(false);
-  const [owl, setOwl] = useState(false);
-  const [parrot, setParrot] = useState(false);
-  const [penguin, setPenguin] = useState(false);
-  const [axolotl, setAxolotl] = useState(false);
-  const [cat, setCat] = useState(false);
-  const [raccoon, setRaccoon] = useState(false);
+
+  const [recording, setRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [animals, setAnimals] = useState({
+    'koala': true,
+    'bee': true,
+    'owl': true,
+    'parrot': true,
+    'penguin': true,
+    'axolotl': true,
+    'cat': true,
+    'raccoon': true,
+  });
+  const [tempUserMessage, setTempUserMessage] = useState('');
+  const [userMessage, setUserMessage] = useState('');
+  const [lastMessage, setLastMessage] = useState('');
+
+  const [audioData, setAudioData] = useState(null);
+  const [ttsAudio, setTtsAudio] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const [messageHistory, setMessageHistory] = useState([]);
+  const [timer, setTimer] = useState(null);
+  const [messageTTS, setMessageTTS] = useState('');
+  const [audioSrc, setAudioSrc] = useState(null);
+  const audioRef = useRef(null);
+
+
+  // TTS
+  const handleTTS = async (messageTTS) => {
+    try {
+      const response = await axios.post('http://localhost:8080/generate-speech', 
+      { text: messageTTS }, 
+      { responseType: 'blob' });
+      const audioBlobUrl = URL.createObjectURL(response.data);
+      setAudioSrc(audioBlobUrl);
+  } catch (error) {
+      console.error('Error:', error);
+      setTtsAudio(null);
+  }
+  };
+  useEffect(() => {
+    // Play audio only when audioSrc changes and it's not null
+    if (audioSrc && audioRef.current) {
+        audioRef.current.src = audioSrc;
+        audioRef.current.play();
+    }
+}, [audioSrc]); 
+
+  const storeLastMessage = (message) => {
+    setLastMessage(message);
+  }
+
+  // Handles text input from user
+  const handleInputChange = (input) => {
+    setTempUserMessage(input.target.value);
+  };
+  const handleSubmit = () => {
+    if (tempUserMessage === '') return;
+    setUserMessage(tempUserMessage);
+    setLastMessage(tempUserMessage);
+    updateMessageHistory('You', tempUserMessage);
+    setTempUserMessage('')
+    console.log("Message stored:", tempUserMessage); // Example action
+  };
+  const handleKeyPress = (button) => {
+    if (button.key === 'Enter') {
+      button.preventDefault(); 
+      handleSubmit();
+    }
+  };
+
+  const handleSelectAnimal = (animal) => {
+    console.log('clickedSelections', animal);
+    if (animals[animal]) {
+      setAnimals({...animals, [animal]: false});
+    } else {
+      setAnimals({...animals, [animal]: true});
+    }
+    console.log(animals);
+  }
+
+  const updateMessageHistory = (title, message) => {
+    const messageEntry = new Map();
+    messageEntry.set('title', title);
+    messageEntry.set('message', message);
+
+    // Update the state with the new entry
+    setMessageHistory(prevHistory => [...prevHistory, messageEntry]);
+
+    console.log(messageHistory)
+    // console.log(title, String(messageHistory.get(title)));
+  }
+
+  const runAI = async (title, personality) => {
+    const model = new LangChainOpenAI({ temperature: 0.7, openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY });
+    //Calls out to the model's (OpenAI's) endpoint passing the prompt. This call returns a string
+    const res = await model.call(
+      lastMessage + "/n" + 
+      "Above was the previous message. Give a response from someone with this personality:" + "/n" + 
+      personality + "/n" + 
+      + userMessage
+    );
+    console.log({ res });
+    storeLastMessage(res);
+    updateMessageHistory(title, res);
+    handleTTS(res);
+  };
+
+
+
+
+
+  // STT
+  async function sendAudioToServer(audio) {
+    const formData = new FormData();
+    formData.append('file', audio);
+    console.log('Sending audio to server', audio)
+
+    try {
+      const response = await fetch('http://localhost:8080/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      });
+
+      console.log('Sending audio to server pt2')
+    
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Success", data.transcription);
+        setUserMessage(data.transcription)
+        setLastMessage(data.transcription)
+        updateMessageHistory('You', data.transcription);
+        return data.transcribedText; // The transcribed text returned from the server
+      } else {
+        // Handle errors
+        console.error('Server responded with an error:', response.status, response.statusText);
+      }
+    } catch (error) {
+      console.error("Error sending audio to server", error)
+    }
+  }
+
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        if (!mediaRecorderRef.current) {
+          const recorder = new MediaRecorder(stream);
+          recorder.ondataavailable = async (event) => {
+            setAudioData(event.data);
+            if (event.data.size > 0) {
+              await sendAudioToServer(event.data);
+            }
+          };
+          mediaRecorderRef.current = recorder;
+        }
+      });
+
+    return () => {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  });
+
+  const handleKeyDown = (event) => {
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+      return; // Skip the rest of the logic if typing in a text box
+    }
+
+    if (event.code === 'Space' && mediaRecorderRef.current?.state === 'inactive') {
+      mediaRecorderRef.current.start();
+      event.preventDefault(); // Prevents any default behavior associated with the spacebar
+    }
+  };
+  
+  const handleKeyUp = (event) => {
+    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+      return; // Skip the rest of the logic if typing in a text box
+    }
+    if (event.code === 'Space' && mediaRecorderRef.current?.state === 'recording') {
+      mediaRecorderRef.current.stop();
+      event.preventDefault(); // Prevents any default behavior associated with the spacebar
+    }
+  };
+
+
+  
+
+  // Components
+  const ChatMessage = ({ title, message }) => {
+    return (
+      <div 
+        className={`flex w-full h-fit px-4 py-4 rounded-xl border-2 flex-col justify-between items-start gap-1`}
+        onClick={() => handleTTS(message)}
+      >
+        <div className="text-xs">{title}</div>
+        <div className="text-md">{message}</div>
+      </div>
+    )
+  }
+  
+  // Helper function to convert hex to rgba
+  const hexToRGBA = (hex, opacity) => {
+    let r = parseInt(hex.slice(1, 3), 16),
+        g = parseInt(hex.slice(3, 5), 16),
+        b = parseInt(hex.slice(5, 7), 16);
+
+    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+  };
+
+  const Select = ({ name }) => {
+    // const [isActive, setIsActive] = useState(true);
+    const [isHovered, setIsHovered] = useState(false);
+    const animal = PERSONALITIES[name];
+    const animalColor = animal ? animal.color : '#ffffff'; // default color as white
+
+    const boxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}`;
+    const hoverBoxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}, 0 0 30px 0 ${hexToRGBA(animalColor, 0.4)}`;
+
+    const activeStyles = animals[name] || isHovered
+      ? { borderColor: animalColor, backgroundColor: animalColor, boxShadow: hoverBoxShadow } 
+      : { borderColor: animalColor, boxShadow };
+
+
+    return (
+      <button 
+        style={activeStyles} 
+        className="btn btn-outline min-h-[22vh] min-w-[20%] flex flex-grow border-2 flex-col flex-nowrap pt-8 aspect-square"
+        onClick={() => {
+          handleSelectAnimal(name)
+          // setIsActive(!isActive)
+        }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+      >
+        <p className={`${animals[name] ? 'text-[#282A35]': ""}`}>{PERSONALITIES[name]?.title}</p>
+        <Image src={animal?.image || 'defaultImage.jpg'} width={180} height={180} alt={animal?.title || 'Default Title'} />
+      </button>
+    );
+  };
+
+  const Avatar = ({ name }) => {
+    const [isHovered, setIsHovered] = useState(false);
+    const animal = PERSONALITIES[name];
+    const animalColor = animal ? animal.color : '#ffffff'; // default color as white
+
+    const boxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}`;
+    const hoverBoxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}, 0 0 30px 0 ${hexToRGBA(animalColor, 0.4)}`;
+
+    const hoverStyles = isHovered 
+      ? { borderColor: animalColor, backgroundColor: animalColor, boxShadow: hoverBoxShadow } 
+      : { borderColor: animalColor, boxShadow };
+
+    return (
+      <button 
+        style={hoverStyles} 
+        className={`btn btn-outline min-h-[22vh] min-w-[30%] flex flex-grow border-2 flex-col flex-nowrap pt-2 justify-start overflow-hidden hover:overflow-visible hover:z-10 relative ${animals[name] ? "" : "hidden"}`}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onClick={() => runAI(animal.title, animal.personality)}
+      >
+        <p>{PERSONALITIES[name]?.title}</p>
+        <Image src={animal?.image || 'defaultImage.jpg'} className="absolute top-8" width={230} height={230} alt={animal?.title || 'Default Title'} />
+      </button>
+    );
+  };
+
 
 
 
   return (
     <main className="flex max-h-screen flex-col items-start justify-between py-4 px-4 bg-base-100">
+      {/* <p>{recording ? 'Recording...' : 'Press and hold Space to record'}</p> */}
+      <div className='hidden'>
+        {/* <button onClick={() => runAI("","")}>runAI</button> */}
+        {/* <button onClick={() => runTTS("hello, I am so tired")}>tts</button> */}
+        <audio ref={audioRef} controls/>
+        <p className='absolute'>{userMessage}</p>
+      </div>
+      
 
       <div className="drawer drawer-end">
         <input id="my-drawer-4" type="checkbox" className="drawer-toggle" checked/>
-
         <div className='drawer-content flex flex-row'>
-          <div className="flex flex-col items-center justify-between py-10 px-12 w-full h-full gap-10">
-            <div className='flex flex-col gap-10 w-full h-full'>
+          <div className="flex flex-col items-center justify-between py-8 px-12 w-full h-full gap-10">
+
+            <div className='flex flex-col gap-6 w-full p-0 h-min '>
               <div className="flex items-center justify-between w-full">
-                <div className='flex items-center justify-center gap-3 '>
-                  <button className="btn btn-primary">Clear table</button>
-                  
+                <div className='flex items-center justify-center gap-3 '>                  
                   {/* The button to open modal */}
                   <label htmlFor="my_modal_6" className="btn btn-secondary">Discussion participant</label> {/* Change name */}
                   
@@ -121,7 +332,10 @@ export default function Home() {
                       <h3 className="font-bold text-2xl">Discussion participants</h3>
                       <div className='flex flex-row flex-wrap gap-4'>
                         {Object.keys(PERSONALITIES).map((animal) => (
-                          <Select key={animal} name={animal} />
+                          <Select 
+                            key={animal} 
+                            name={animal} 
+                          />
                         ))}
                       </div>
                       <div className="modal-action">
@@ -145,19 +359,26 @@ export default function Home() {
 
               {/* Avatars */}
               <div className='flex flex-row gap-6 flex-wrap w-full '>
-                <Avatar name="koala"/>
-                <Avatar name="bee"/>
-                <Avatar name="cat"/>
-                <Avatar name="cat"/>
-                <Avatar name="cat"/>
-                <Avatar name="parrot"/>
-                <Avatar name="bee"/>
+                <Avatar name="axolotl" />
+                <Avatar name="penguin" />
+                <Avatar name="koala" />
+                <Avatar name="owl" />
+                <Avatar name="bee" />
+                <Avatar name="raccoon" />
+                <Avatar name="cat" />
+                <Avatar name="parrot" />
               </div>
             </div>
             
-            <h3 className='w-fit opacity-50 text-xl pb-4' style={{ background: 'linear-gradient(to right, #D36497, #59C0D7)', WebkitBackgroundClip: 'text', color: 'transparent', textShadow: `0px 0px 20px #9D8EB4` }}>
-              Hold space to speak
-            </h3>
+            
+            <div className='flex flex-col gap-4 items-center relative '>
+              {/* <div className='absolute top-10'>
+                {audioData && <audio src={URL.createObjectURL(audioData)} controls />}
+              </div> */}
+              <h3 className='w-fit opacity-50 text-xl pb-6' style={{ background: 'linear-gradient(to right, #D36497, #59C0D7)', WebkitBackgroundClip: 'text', color: 'transparent', textShadow: `0px 0px 20px #9D8EB4` }}>
+                Hold space to speak
+              </h3>
+            </div>
 
           </div>
 
@@ -182,13 +403,18 @@ export default function Home() {
 
         <div className={`drawer-side relative rounded-3xl h-full transition-all duration-300 ${drawerOpen ? "w-fit" : " w-0"}`}>
           <ul className="menu p-12 w-[30vw] min-h-full bg-base-200 text-base-content flex flex-col justify-between gap-10">
-            <div className='flex flex-col gap-8'>
-              <ChatMessage name="raccoon" message="Lorem" />
-              <ChatMessage name="raccoon" message="Lorem" />
+            <div className='flex flex-col gap-8 overflow-y-scroll max-h-[76vh] no-scrollbar'>
+              {messageHistory.map((entry, index) => (
+                <ChatMessage key={index} title={entry.get('title')} message={entry.get('message')} />
+              ))}
             </div>
             <div className='flex flex-row gap-2'>
-              <input type="text" placeholder="Type here" className="input input-bordered w-full" />
-              <button className="btn btn-outline btn-success">Ask</button>
+              <input type="text"
+                value={tempUserMessage}
+                onChange={handleInputChange}
+                onKeyPress={handleKeyPress}
+                placeholder="Type something or hold space to talk" className="input input-bordered w-full" />
+              <button className="btn btn-outline btn-success" onClick={handleSubmit} >Ask</button>
             </div>
           </ul>
         </div>
@@ -196,3 +422,5 @@ export default function Home() {
     </main>
   )
 }
+
+
