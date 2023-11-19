@@ -127,9 +127,9 @@ export default function Home() {
     const model = new LangChainOpenAI({ temperature: 0.7, maxTokens: 200, openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY });
     //Calls out to the model's (OpenAI's) endpoint passing the prompt. This call returns a string
     const res = await model.call(
-      "You are a " + personality + " friend who offers advice, opinions, and suggestion based on whay you think. Your friend's concern is: " +
+      "You are a " + personality + " person.  " +
       userMessage + "/n" +
-      "Based on the previous response: " + lastMessage + "answer with a " + personality + " bias. Use emojis rarely."
+      "Based on the previous response: " + lastMessage + "answer with a " + personality + " bias. "
     );
     console.log({ res });
     storeLastMessage(res);
