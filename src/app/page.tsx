@@ -1,6 +1,6 @@
 'use client';
 import Image from 'next/image'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, SetStateAction } from 'react'
 import { OpenAI as LangChainOpenAI } from "langchain/llms/openai";
 import { PERSONALITIES } from './constant'; // Make sure the file name is correct
 import axios from 'axios';
@@ -40,14 +40,14 @@ export default function Home() {
   const [userMessage, setUserMessage] = useState('');
   const [lastMessage, setLastMessage] = useState('');
 
-  const [audioData, setAudioData] = useState(null);
+  const [audioData, setAudioData] = useState<Blob | null>(null);
   const [ttsAudio, setTtsAudio] = useState(null);
-  const mediaRecorderRef = useRef(null);
-  const [messageHistory, setMessageHistory] = useState([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const [messageHistory, setMessageHistory] = useState<{ title: string; message: string }[]>([]);
   const [timer, setTimer] = useState(null);
   const [messageTTS, setMessageTTS] = useState('');
-  const [audioSrc, setAudioSrc] = useState(null);
-  const audioRef = useRef(null);
+  const [audioSrc, setAudioSrc] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [animalVoice, setAnimalVoice] = useState({
     "The Timid Goody-Two-Shoes": "nova",
@@ -59,10 +59,11 @@ export default function Home() {
     "The Practical Realist": "alloy",
     "The Daring Devil's Advocate": "echo"
   });
+  
 
 
   // TTS
-  const handleTTS = async (messageTTS, voice) => {
+  const handleTTS = async (messageTTS: string, voice: any) => {
     try {
       const response = await axios.post('http://localhost:8080/generate-speech', 
       { text: messageTTS, voice: voice }, 
@@ -82,12 +83,12 @@ export default function Home() {
     }
 }, [audioSrc]); 
 
-  const storeLastMessage = (message) => {
+  const storeLastMessage = (message: SetStateAction<string>) => {
     setLastMessage(message);
   }
 
   // Handles text input from user
-  const handleInputChange = (input) => {
+  const handleInputChange = (input: { target: { value: SetStateAction<string>; }; }) => {
     setTempUserMessage(input.target.value);
   };
   const handleSubmit = () => {
@@ -98,27 +99,22 @@ export default function Home() {
     setTempUserMessage('')
     console.log("Message stored:", tempUserMessage); // Example action
   };
-  const handleKeyPress = (button) => {
+  const handleKeyPress = (button: { key: string; preventDefault: () => void; }) => {
     if (button.key === 'Enter') {
       button.preventDefault(); 
       handleSubmit();
     }
   };
 
-  const handleSelectAnimal = (animal) => {
-    console.log('clickedSelections', animal);
-    if (animals[animal]) {
-      setAnimals({...animals, [animal]: false});
-    } else {
-      setAnimals({...animals, [animal]: true});
+  const handleSelectAnimal = (animal: string | number) => {
+    if (animals[animal as keyof typeof animals] !== undefined) {
+      setAnimals({ ...animals, [animal as keyof typeof animals]: !animals[animal as keyof typeof animals] });
     }
-    console.log(animals);
   }
 
-  const updateMessageHistory = (title, message) => {
-    const messageEntry = new Map();
-    messageEntry.set('title', title);
-    messageEntry.set('message', message);
+  const updateMessageHistory = (title: string, message: string) => {
+    const messageEntry = { title, message }; // Create an object instead of a Map
+
 
     // Update the state with the new entry
     setMessageHistory(prevHistory => [...prevHistory, messageEntry]);
@@ -127,7 +123,7 @@ export default function Home() {
     // console.log(title, String(messageHistory.get(title)));
   }
 
-  const runAI = async (title, personality) => {
+  const runAI = async (title: string, personality: string) => {
     const model = new LangChainOpenAI({ temperature: 0.7, maxTokens: 200, openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY });
     //Calls out to the model's (OpenAI's) endpoint passing the prompt. This call returns a string
     const res = await model.call(
@@ -138,12 +134,12 @@ export default function Home() {
     console.log({ res });
     storeLastMessage(res);
     updateMessageHistory(title, res);
-    handleTTS(res, animalVoice[title]);
+    handleTTS(res, animalVoice[title as keyof typeof animalVoice]);
   };
 
 
   // STT
-  async function sendAudioToServer(audio) {
+  async function sendAudioToServer(audio: string | Blob) {
     const formData = new FormData();
     formData.append('file', audio);
     console.log('Sending audio to server', audio)
@@ -204,8 +200,8 @@ export default function Home() {
     };
   });
 
-  const handleKeyDown = (event) => {
-    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+  const handleKeyDown = (event: { code: string; preventDefault: () => void; }) => {
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
       return; // Skip the rest of the logic if typing in a text box
     }
 
@@ -217,8 +213,8 @@ export default function Home() {
     }
   };
   
-  const handleKeyUp = (event) => {
-    if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+  const handleKeyUp = (event: { code: string; preventDefault: () => void; }) => {
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) {
       return; // Skip the rest of the logic if typing in a text box
     }
     if (event.code === 'Space' && mediaRecorderRef.current?.state === 'recording') {
@@ -228,11 +224,14 @@ export default function Home() {
     }
   };
 
-
+  type ChatMessageProps = {
+    title: string;
+    message: string;
+  };
   
 
   // Components
-  const ChatMessage = ({ title, message }) => {
+  const ChatMessage: React.FC<ChatMessageProps> = ({ title, message }) => {
     let color;
     if (title === "The Timid Goody-Two-Shoes") {
         color = "#B795F3";
@@ -260,7 +259,7 @@ export default function Home() {
       <div 
         style={{borderColor: color}}
         className={`flex w-full h-fit px-4 py-4 rounded-xl border-2 flex-col justify-between items-start gap-1`}
-        onClick={() => handleTTS(message, animalVoice[title])}
+        onClick={() => handleTTS(message, animalVoice[title as keyof typeof animalVoice])}
       >
         <div 
         style={{color : color}} 
@@ -271,7 +270,7 @@ export default function Home() {
   }
   
   // Helper function to convert hex to rgba
-  const hexToRGBA = (hex, opacity) => {
+  const hexToRGBA = (hex: string, opacity: number) => {
     let r = parseInt(hex.slice(1, 3), 16),
         g = parseInt(hex.slice(3, 5), 16),
         b = parseInt(hex.slice(5, 7), 16);
@@ -279,8 +278,11 @@ export default function Home() {
     return `rgba(${r}, ${g}, ${b}, ${opacity})`;
   };
 
-  const Select = ({ name }) => {
-    // const [isActive, setIsActive] = useState(true);
+  type SelectProps = {
+    name: string;
+  };
+  
+  const Select: React.FC<SelectProps> = ({ name }) => {    // const [isActive, setIsActive] = useState(true);
     const [isHovered, setIsHovered] = useState(false);
     const animal = PERSONALITIES[name];
     const animalColor = animal ? animal.color : '#ffffff'; // default color as white
@@ -288,42 +290,23 @@ export default function Home() {
     const boxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}`;
     const hoverBoxShadow = `0 0 10px 0 ${hexToRGBA(animalColor, 0.3)}, 0 0 30px 0 ${hexToRGBA(animalColor, 0.4)}`;
 
-    const activeStyles = animals[name] || isHovered
-      ? { borderColor: animalColor, backgroundColor: animalColor, boxShadow: hoverBoxShadow } 
-      : { borderColor: "transparent" };
+    const activeStyles = (animals[name as keyof typeof animals] || isHovered)
+  ? { borderColor: animalColor, backgroundColor: animalColor, boxShadow: hoverBoxShadow } 
+  : { borderColor: "transparent" };
 
 
     return (
-      // <div className='min-h-[22vh] min-w-[20%] flex flex-grow flex-col'>
-      //   <button 
-      //     style={activeStyles} 
-      //     className="btn btn-outline min-h-[22vh] flex flex-grow border-2 flex-col flex-nowrap pt-8 aspect-square"
-      //     onClick={() => {
-      //       handleSelectAnimal(name)
-      //       // setIsActive(!isActive)
-      //     }}
-      //     onMouseEnter={() => setIsHovered(true)}
-      //     onMouseLeave={() => setIsHovered(false)}
-      //   >
-      //     <p className={`${animals[name] ? 'text-[#282A35]': ""}`}>{PERSONALITIES[name]?.title}</p>
-      //     <Image src={animal?.image || 'defaultImage.jpg'} width={180} height={180} alt={animal?.title || 'Default Title'} />
-      //   </button>
-        
-      //   <p className='max-w-[18vw]'>{PERSONALITIES[name]?.summary}</p>
-      // </div>
-
       <div className="card min-h-[22vh] min-w-[20%] max-w-[23.86%] flex flex-grow flex-shrink flex-col bg-base-100 shadow-xl">
         <button 
           style={activeStyles} 
           className="btn btn-outline min-h-[22vh] flex flex-grow border-2 flex-col flex-nowrap pt-8 aspect-square"
-          onClick={() => {
-            handleSelectAnimal(name)
-            // setIsActive(!isActive)
-          }}
+          onClick={() => handleSelectAnimal(name)}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
-          <p className={`${animals[name] ? 'text-[#282A35]': ""}`}>{PERSONALITIES[name]?.title}</p>
+          <p className={`${(animals[name as keyof typeof animals]) ? 'text-[#282A35]' : ''}`}>
+            {PERSONALITIES[name]?.title}
+          </p>
           <Image src={animal?.image || 'defaultImage.jpg'} width={180} height={180} alt={animal?.title || 'Default Title'} />
         </button>      
         <div className="card-body py-6 px-6">
@@ -333,8 +316,11 @@ export default function Home() {
     );
   };
 
-  const Avatar = ({ name }) => {
-    const [isHovered, setIsHovered] = useState(false);
+  type AvatarProps = {
+    name: string;
+  };
+  
+  const Avatar: React.FC<AvatarProps> = ({ name }) => {    const [isHovered, setIsHovered] = useState(false);
     const animal = PERSONALITIES[name];
     const animalColor = animal ? animal.color : '#ffffff'; // default color as white
 
@@ -348,7 +334,7 @@ export default function Home() {
     return (
       <button 
         style={hoverStyles} 
-        className={`btn btn-outline min-h-[22vh] min-w-[31%] flex grow flex-grow border-2 flex-col flex-nowrap pt-2 justify-start overflow-hidden hover:overflow-visible hover:z-10 relative ${animals[name] ? "" : "hidden"}`}
+        className={`btn btn-outline min-h-[22vh] min-w-[31%] flex grow flex-grow border-2 flex-col flex-nowrap pt-2 justify-start overflow-hidden hover:overflow-visible hover:z-10 relative ${animals[name as keyof typeof animals] ? "" : "hidden"}`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={() => runAI(animal.title, animal.personality)}
@@ -462,9 +448,9 @@ export default function Home() {
 
         <div className={`drawer-side relative rounded-3xl h-full transition-all duration-300 ${drawerOpen ? "w-fit" : " w-0"}`}>
           <ul className="menu p-12 w-[30vw] min-h-full bg-base-200 text-base-content flex flex-col justify-between gap-10">
-            <div className='flex flex-col gap-8 overflow-y-scroll max-h-[76vh] no-scrollbar'>
+          <div className='flex flex-col gap-8 overflow-y-scroll max-h-[76vh] no-scrollbar'>
               {messageHistory.map((entry, index) => (
-                <ChatMessage key={index} title={entry.get('title')} message={entry.get('message')} />
+                <ChatMessage key={index} title={entry.title} message={entry.message} />
               ))}
             </div>
             <div className='flex flex-row gap-2'>
