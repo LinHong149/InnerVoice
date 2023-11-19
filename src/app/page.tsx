@@ -48,13 +48,24 @@ export default function Home() {
   const [messageTTS, setMessageTTS] = useState('');
   const [audioSrc, setAudioSrc] = useState(null);
   const audioRef = useRef(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [animalVoice, setAnimalVoice] = useState({
+    "The Timid Goody-Two-Shoes": "nova",
+    "The Creative Dreamer": "shimmer",
+    "The Supportive Best Friend": "alloy",
+    "The Charismatic Leader": "fable",
+    "The Analytical Thinker": "nova",
+    "The Witty Humorist": "onyx",
+    "The Practical Realist": "alloy",
+    "The Daring Devil's Advocate": "echo"
+  });
 
 
   // TTS
-  const handleTTS = async (messageTTS) => {
+  const handleTTS = async (messageTTS, voice) => {
     try {
       const response = await axios.post('http://localhost:8080/generate-speech', 
-      { text: messageTTS }, 
+      { text: messageTTS, voice: voice }, 
       { responseType: 'blob' });
       const audioBlobUrl = URL.createObjectURL(response.data);
       setAudioSrc(audioBlobUrl);
@@ -117,22 +128,18 @@ export default function Home() {
   }
 
   const runAI = async (title, personality) => {
-    const model = new LangChainOpenAI({ temperature: 0.7, openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY });
+    const model = new LangChainOpenAI({ temperature: 0.7, maxTokens: 200, openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY });
     //Calls out to the model's (OpenAI's) endpoint passing the prompt. This call returns a string
     const res = await model.call(
-      lastMessage + "/n" + 
-      "Above was the previous message. Give a response from someone with this personality:" + "/n" + 
-      personality + "/n" + 
-      + userMessage
+      "You are a " + personality + " friend who offers advice, opinions, and suggestion based on whay you think. Your friend's concern is: " +
+      userMessage + "/n" +
+      "Based on the previous response: " + lastMessage + "answer with a " + personality + " bias. Use emojis rarely."
     );
     console.log({ res });
     storeLastMessage(res);
     updateMessageHistory(title, res);
-    handleTTS(res);
+    handleTTS(res, animalVoice[title]);
   };
-
-
-
 
 
   // STT
@@ -203,6 +210,8 @@ export default function Home() {
     }
 
     if (event.code === 'Space' && mediaRecorderRef.current?.state === 'inactive') {
+      setIsSpeaking(true);
+      console.log(isSpeaking)
       mediaRecorderRef.current.start();
       event.preventDefault(); // Prevents any default behavior associated with the spacebar
     }
@@ -213,6 +222,7 @@ export default function Home() {
       return; // Skip the rest of the logic if typing in a text box
     }
     if (event.code === 'Space' && mediaRecorderRef.current?.state === 'recording') {
+      setIsSpeaking(false);
       mediaRecorderRef.current.stop();
       event.preventDefault(); // Prevents any default behavior associated with the spacebar
     }
@@ -223,13 +233,39 @@ export default function Home() {
 
   // Components
   const ChatMessage = ({ title, message }) => {
+    let color;
+    if (title === "The Timid Goody-Two-Shoes") {
+        color = "#B795F3";
+    } else if (title === "The Creative Dreamer") {
+        color = "#BF87D9";
+    } else if (title === "The Supportive Best Friend") {
+        color = "#C779BE";
+    } else if (title === "The Charismatic Leader") {
+        color = "#D36497";
+    } else if (title === "The Analytical Thinker") {
+        color = "#C46F9E";
+    } else if (title === "The Witty Humorist") {
+        color = "#A18AB1";
+    } else if (title === "The Practical Realist") {
+        color = "#7DA5C4";
+    } else if (title === "The Daring Devil's Advocate") {
+        color = "#59C0D7";
+    } else {
+        color = "#ffffff";
+    }
+
+
+
     return (
       <div 
+        style={{borderColor: color}}
         className={`flex w-full h-fit px-4 py-4 rounded-xl border-2 flex-col justify-between items-start gap-1`}
-        onClick={() => handleTTS(message)}
+        onClick={() => handleTTS(message, animalVoice[title])}
       >
-        <div className="text-xs">{title}</div>
-        <div className="text-md">{message}</div>
+        <div 
+        style={{color : color}} 
+        className="text-xs">{title}</div>
+        <div className="text-base">{message}</div>
       </div>
     )
   }
@@ -254,23 +290,46 @@ export default function Home() {
 
     const activeStyles = animals[name] || isHovered
       ? { borderColor: animalColor, backgroundColor: animalColor, boxShadow: hoverBoxShadow } 
-      : { borderColor: animalColor, boxShadow };
+      : { borderColor: "transparent" };
 
 
     return (
-      <button 
-        style={activeStyles} 
-        className="btn btn-outline min-h-[22vh] min-w-[20%] flex flex-grow border-2 flex-col flex-nowrap pt-8 aspect-square"
-        onClick={() => {
-          handleSelectAnimal(name)
-          // setIsActive(!isActive)
-        }}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
-        <p className={`${animals[name] ? 'text-[#282A35]': ""}`}>{PERSONALITIES[name]?.title}</p>
-        <Image src={animal?.image || 'defaultImage.jpg'} width={180} height={180} alt={animal?.title || 'Default Title'} />
-      </button>
+      // <div className='min-h-[22vh] min-w-[20%] flex flex-grow flex-col'>
+      //   <button 
+      //     style={activeStyles} 
+      //     className="btn btn-outline min-h-[22vh] flex flex-grow border-2 flex-col flex-nowrap pt-8 aspect-square"
+      //     onClick={() => {
+      //       handleSelectAnimal(name)
+      //       // setIsActive(!isActive)
+      //     }}
+      //     onMouseEnter={() => setIsHovered(true)}
+      //     onMouseLeave={() => setIsHovered(false)}
+      //   >
+      //     <p className={`${animals[name] ? 'text-[#282A35]': ""}`}>{PERSONALITIES[name]?.title}</p>
+      //     <Image src={animal?.image || 'defaultImage.jpg'} width={180} height={180} alt={animal?.title || 'Default Title'} />
+      //   </button>
+        
+      //   <p className='max-w-[18vw]'>{PERSONALITIES[name]?.summary}</p>
+      // </div>
+
+      <div className="card min-h-[22vh] min-w-[20%] max-w-[23.86%] flex flex-grow flex-shrink flex-col bg-base-100 shadow-xl">
+        <button 
+          style={activeStyles} 
+          className="btn btn-outline min-h-[22vh] flex flex-grow border-2 flex-col flex-nowrap pt-8 aspect-square"
+          onClick={() => {
+            handleSelectAnimal(name)
+            // setIsActive(!isActive)
+          }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          <p className={`${animals[name] ? 'text-[#282A35]': ""}`}>{PERSONALITIES[name]?.title}</p>
+          <Image src={animal?.image || 'defaultImage.jpg'} width={180} height={180} alt={animal?.title || 'Default Title'} />
+        </button>      
+        <div className="card-body py-6 px-6">
+          <p>{PERSONALITIES[name]?.summary}</p>
+        </div>
+      </div>
     );
   };
 
@@ -289,7 +348,7 @@ export default function Home() {
     return (
       <button 
         style={hoverStyles} 
-        className={`btn btn-outline min-h-[22vh] min-w-[30%] flex flex-grow border-2 flex-col flex-nowrap pt-2 justify-start overflow-hidden hover:overflow-visible hover:z-10 relative ${animals[name] ? "" : "hidden"}`}
+        className={`btn btn-outline min-h-[22vh] min-w-[31%] flex grow flex-grow border-2 flex-col flex-nowrap pt-2 justify-start overflow-hidden hover:overflow-visible hover:z-10 relative ${animals[name] ? "" : "hidden"}`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         onClick={() => runAI(animal.title, animal.personality)}
@@ -323,13 +382,13 @@ export default function Home() {
               <div className="flex items-center justify-between w-full">
                 <div className='flex items-center justify-center gap-3 '>                  
                   {/* The button to open modal */}
-                  <label htmlFor="my_modal_6" className="btn btn-secondary">Discussion participant</label> {/* Change name */}
+                  <label htmlFor="my_modal_6" className="btn btn-secondary">Add voices</label> {/* Change name */}
                   
 
                   <input type="checkbox" id="my_modal_6" className="modal-toggle" />
                   <div className="modal">
                     <div className="modal-box  min-w-[80vw] flex flex-col gap-6" >
-                      <h3 className="font-bold text-2xl">Discussion participants</h3>
+                      <h3 className="font-bold text-3xl">What voice do you need right now?</h3>
                       <div className='flex flex-row flex-wrap gap-4'>
                         {Object.keys(PERSONALITIES).map((animal) => (
                           <Select 
@@ -339,8 +398,7 @@ export default function Home() {
                         ))}
                       </div>
                       <div className="modal-action">
-                        <label htmlFor="my_modal_6" className="btn btn-error btn-outline">Discard</label>
-                        <label htmlFor="my_modal_6" className="btn btn-success">Save</label>
+                        <label htmlFor="my_modal_6" className="btn btn-success">Choose voices!</label>
                       </div>
                     </div>
                     <label className="modal-backdrop" htmlFor="my_modal_6"></label>
@@ -375,9 +433,10 @@ export default function Home() {
               {/* <div className='absolute top-10'>
                 {audioData && <audio src={URL.createObjectURL(audioData)} controls />}
               </div> */}
-              <h3 className='w-fit opacity-50 text-xl pb-6' style={{ background: 'linear-gradient(to right, #D36497, #59C0D7)', WebkitBackgroundClip: 'text', color: 'transparent', textShadow: `0px 0px 20px #9D8EB4` }}>
-                Hold space to speak
-              </h3>
+              {!isSpeaking ? 
+                <h3 className='w-fit opacity-50 text-xl pb-6 font-bold' style={{ background: 'linear-gradient(to right, #D36497, #59C0D7)', WebkitBackgroundClip: 'text', color: 'transparent', textShadow: `0px 0px 20px #9D8EB4` }}>Hold space to speak</h3> :
+                <span className="loading loading-dots loading-lg opacity-50"></span>
+              }
             </div>
 
           </div>

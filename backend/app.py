@@ -50,11 +50,11 @@ def transcribe_audio():
 def generate_speech():
     try:
         data = request.json
-        input_text = data.get('text', 'Default text if none provided')
-
+        input_text = data.get('text', "Sorry, I couldn't catchthat, please try again")
+        voice = data.get('voice', 'alloy')
         response = openai.audio.speech.create(
             model="tts-1",
-            voice="alloy",
+            voice=voice,
             input=input_text,
         )
 
